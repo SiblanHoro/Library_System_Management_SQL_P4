@@ -48,10 +48,12 @@ FROM Issued_Status
 GROUP BY issued_emp_id
 HAVING COUNT(*) > 1;
 
---(Create Table As Select)
+--(Create View As Select)
 
---Task 6: Create Summary Tables to generate new tables based on query results - each book and total book_issued_cnt**
+--Task 6: Create Summary Tables to generate View based on query results - each book and total book_issued_cnt**
 
+CREATE VIEW Summary_Table
+AS
 SELECT B.isbn,
        book_title,
        COUNT(I.issued_id) Issue_count
@@ -59,6 +61,8 @@ FROM Books B
 JOIN Issued_Status I 
      ON B.isbn = I.issued_book_isbn
 GROUP BY B.isbn, B.book_title;
+
+SELECT * FROM Summary_Table
 
 ---Data Analysis & Findings
 
@@ -79,11 +83,6 @@ JOIN Issued_Status I
 GROUP BY category;
 
 ---Task 9: List Members Who Registered in the Last 180 Days:
-SELECT * FROM Members
-INSERT INTO Members VALUES 
-('C117', 'Siblan', '145 main st', '2025-03-20'),
-('C111', 'Akhilesh', '133 main st', '2025-02-27'),
-('C115', 'Akash', '133 main st', '2025-01-15');
 
 SELECT * FROM Members
 WHERE DATEDIFF(DD, reg_date, GETDATE()) < 180;
@@ -99,14 +98,17 @@ SELECT B.*,
 FROM Employees E 
 JOIN Branch B 
      ON B.branch_id = E.branch_id  
-JOIN Employees E2
+JOIN Employees E2   
      ON E2.emp_id = B.manager_id
 
 ---Task 11. Create a Table of Books with Rental Price Above a Certain Threshold:
 
-CREATE TABLE Expenssive_Books AS 
-SELECT * FROM Books 
+SELECT * INTO Expenssive_Books 
+FROM Books
 WHERE rental_price > 7.00
+
+SELECT * FROM Expenssive_Books
+
 
 ---Task 12: Retrieve the List of Books Not Yet Returned
 
@@ -120,10 +122,6 @@ WHERE RS.return_date IS NULL;
 ---Task 13: Identify Members with Overdue Books
 --Write a query to identify members who have overdue books (assume a 30-day return period). Display the member's_id, member's name, book title, 
 --issue date, and days overdue.
-SELECT * FROM Books
-SELECT * FROM Members
-SELECT * FROM Issued_Status
-SELECT * FROM Return_Status
 
 SELECT M.member_id,
        M.member_name,
@@ -146,7 +144,6 @@ ALTER PROCEDURE Add_return_records
 (
  @return_id VARCHAR(10),  
  @issued_id VARCHAR(10),
- @return_date DATE,
  @book_quality VARCHAR(10)
  )
  AS
@@ -158,30 +155,29 @@ BEGIN
       SELECT issued_book_isbn = @isbn,
 	         issued_book_name = @book_name
 	  FROM Issued_Status
-	  WHERE issued_id = @issued_id;
+	  WHERE issued_id = @issued_id
  
       ---insert into Return_Status
       INSERT INTO Return_Status
 	  VALUES 
-	  (@return_id, @issued_id, GETDATE(), @book_quality);
-END
-IF  
-   @status = 'no'
+	  (@return_id, @issued_id, GETDATE(), @book_quality)
+ 
+  SET @status = 'yes'
      ---Update Issued_Status to 'yes'
-BEGIN
+
      UPDATE Books
 	 SET status = 'yes'
-	 WHERE isbn = @isbn;
+	 WHERE isbn = @isbn
 
-        PRINT 'Thank you for returning the book : %'
+        PRINT 'Thank you for returning the book'
  
 END;
 
 --CALL Procedure 
 
-EXEC Add_return_records  'IS135', 'Good','RS119'
-EXEC Add_return_records  'IS134', 'Good', 'RS120'
-EXEC Add_return_records  'IS136', 'Good', 'RS121'
+EXEC Add_return_records  'RS119', 'IS134','Good' --978-0-307-58837-1
+EXEC Add_return_records  'RS120', 'IS135', 'Good' --978-0-375-41398-8
+EXEC Add_return_records  'RS121', 'IS136', 'Good' --978-0-7432-7357-1
 
 --Testing the function Add_return_records
 
@@ -206,9 +202,8 @@ WHERE issued_book_isbn = '978-0-7432-7357-1'
 SELECT * FROM return_status
 WHERE issued_id IN ('IS135', 'IS134', 'IS136')
 
-DELETE FROM return_status
-WHERE issued_id IN ('IS135', 'IS134', 'IS136')
-
+ALTER TABLE return_status
+ADD return_book_isbn VARCHAR(20)
 
 --Task 15: Branch Performance Report
 --Create a query that generates a performance report for each branch, showing the number of books issued, the number of books returned, 
@@ -233,19 +228,15 @@ GROUP BY B.branch_id, B.manager_id;
 --Task 16: CTAS: Create a Table of Active Members
 --Use the CREATE TABLE AS (CTAS) statement to create a new table active_members containing members who have issued at least one book in the last 2 months.
 
-SELECT * FROM Books
-SELECT * FROM Members
-SELECT * FROM Issued_Status
-SELECT * FROM Return_Status
-SELECT * FROM Branch
-SELECT * FROM Employees
+SELECT * INTO active_members 
+FROM members
+WHERE member_id IN (
+      SELECT DISTINCT issued_member_id
+	  FROM Issued_Status
+	  WHERE issued_date >= DATEADD(MONTH, -2, GETDATE())
+);
 
-
-SELECT * FROM Members
-WHERE member_id IN
-(SELECT DISTINCT issued_member_id
-FROM Issued_Status
-WHERE DATEDIFF(DD, issued_date, GETDATE()) <= 60);
+SELECT * FROM active_members
 
 --Task 17: Find Employees with the Most Book Issues Processed
 --Write a query to find the top 3 employees who have processed the most book issues. Display the employee name, number of books processed, and their branch.
@@ -260,11 +251,9 @@ JOIN Employees AS E
 JOIN Branch AS B
     ON E.branch_id = B.branch_id
 GROUP BY E.emp_name, B.branch_id;
-  
----Task 18: Identify Members Issuing High-Risk Books
---Write a query to identify members who have issued books more than twice with the status "damaged" in the books table. Display the member name, book title, and the number of times they've issued damaged books.
 
---Task 19: Stored Procedure Objective: Create a stored procedure to manage the status of books in a library system. Description: Write a stored 
+
+--Task 18: Stored Procedure Objective: Create a stored procedure to manage the status of books in a library system. Description: Write a stored 
 --procedure that updates the status of a book in the library based on its issuance. The procedure should function as follows: The stored procedure 
 --should take the book_id as an input parameter. The procedure should first check if the book is available (status = 'yes'). If the book is 
 --available, it should be issued, and the status in the books table should be updated to 'no'. If the book is not available (status = 'no'), 
@@ -274,46 +263,43 @@ SELECT * FROM Books
 SELECT * FROM Issued_Status
 SELECT * FROM Return_Status
 
-DELETE FROM Return_Status
-WHERE return_id ='Good'
-
-ALTER PROCEDURE Issue_Book
+ALTER PROCEDURE Issue_Books
 (
-@issued_book_isbn VARCHAR(20),
 @issued_id VARCHAR(10),
-@issued_member_id VARCHAR(10)
+@issued_member_id VARCHAR(10),
+@issued_book_isbn VARCHAR(20),
+@issed_emp_id VARCHAR(10)
 )
 AS
 BEGIN
 
-DECLARE @isbn VARCHAR(20)
-DECLARE @issed_emp_id VARCHAR(10)
-DECLARE @status VARCHAR(10)
-
-BEGIN
-      ---ALL CODE
+     DECLARE @isbn VARCHAR(20)
+    -- DECLARE @issed_emp_id VARCHAR(10)
+     DECLARE @status VARCHAR(10)
+    ---ALL CODE
 	  --CHECKING IF BOOK IS AVAILABLE 'YES'
-      SELECT status = @status
-	  FROM Books
-	  WHERE isbn = @issued_book_isbn;
-
-    IF
+     SELECT status = @status
+	 FROM Books
+	 WHERE isbn = @issued_book_isbn;
+ IF
 	   @status = 'yes' 
+BEGIN
 	   INSERT INTO Issued_Status(issued_id, issued_member_id, issued_date, issued_book_isbn, issued_emp_id)
 	   VALUES
-	   (@issued_id, @issued_member_id, GETDATE(), @issued_book_isbn, @issed_emp_id)
+	  (@issued_id, @issued_member_id, GETDATE(), @issued_book_isbn, @issed_emp_id)
 
 	   UPDATE Books
 	   SET status = 'yes'
 	   WHERE isbn = @isbn;
 
-	       PRINT 'Book Records added sucessfully: %'
-
-	ELSE
-
-	       PRINT 'Sorry to inform you that the book you have requested is unavaialable: %'
-
-	END 
+	     PRINT 'Book Records added sucessfully.'
 END
+	   ELSE
+  BEGIN
+	     PRINT 'Sorry to inform you that the book you have requested is unavaialable.'
+  END
+END 
 
+EXEC Issue_Books 'IS155','C108', '978-0-553-29698-2', 'E104'
+EXEC Issue_Books 'IS156','C108', '978-0-375-41398-8', 'E104'
 
